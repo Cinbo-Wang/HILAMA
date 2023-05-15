@@ -23,8 +23,6 @@ hilama <- function(X, M_multi, Y, is.parallel=T, core_num=4, verbose=T, is.adap=
 
   n <- nrow(X); p <- ncol(X); q <- ncol(M_multi)
 
-  source('./R/fun_ddlasso.R')
-
   ### Step1: X->M: column-wise ddlasso
   if(verbose) cat('Start step 1:  X -> M \n')
   score_all_ls <- esti_score_all(X,rho=0.5,is.parallel = is.parallel,core_num = core_num)
@@ -42,7 +40,7 @@ hilama <- function(X, M_multi, Y, is.parallel=T, core_num=4, verbose=T, is.adap=
     tmp <- result_Theta_ls[[j]]
     u0 <- abs(tmp[,'dd_coef'] / tmp[,'std'])
 
-    pvalue <- 2* stats::pnorm(u0,lower.tail = F)
+    pvalue <- 2 * stats::pnorm(u0,lower.tail = F)
     pvalue_Theta[,j] <- pvalue
     Theta_hat[,j] <- tmp[,'dd_coef']
   }

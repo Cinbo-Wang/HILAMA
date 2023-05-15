@@ -81,7 +81,7 @@ esti_score_all <- function(X,rho=0.5,is.parallel=F,core_num = 4,standardize=TRUE
     doParallel::registerDoParallel(cl)
     score_ls <- foreach::foreach(id = 1:p)%dopar%{
       # source('./R/fun_ddlasso.R')
-      sub_score<- esti_score(X,id=id,F_dc)
+      sub_score <- esti_score(X,id=id,F_dc)
       sub_score
     }
     doParallel::stopImplicitCluster();
