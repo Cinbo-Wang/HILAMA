@@ -7,7 +7,7 @@ false discovery rate control in finite sample settings.
 
 You can install the development version of `HILAMA` from Github via the `devtools` package.
 ```R
-devtools::install_github('')
+devtools::install_github('Cinbo-Wang/HILAMA')
 ```
 
 ## Examples
