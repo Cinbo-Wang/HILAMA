@@ -80,7 +80,7 @@ esti_score_all <- function(X,rho=0.5,is.parallel=F,core_num = 4,standardize=TRUE
     cl <- parallel::makeCluster(core_num,type)
     doParallel::registerDoParallel(cl)
     score_ls <- foreach::foreach(id = 1:p)%dopar%{
-      source('./R/fun_ddlasso.R')
+      # source('./R/fun_ddlasso.R')
       sub_score<- esti_score(X,id=id,F_dc)
       sub_score
     }
@@ -190,7 +190,7 @@ infer_ddlasso <- function(X,Y,rho=0.5,is.parallel=F,core_num = 4,
       cl <- parallel::makeCluster(core_num,type)
       doParallel::registerDoParallel(cl)
       coef_mat <- foreach::foreach(id = 1:p,.combine = 'rbind')%dopar%{
-        source('./R/fun_ddlasso.R')
+        # source('./R/fun_ddlasso.R')
         z_score <- esti_score(X,id=id,F_dc)
 
         bias <- t(z_score) %*% F_dc  %*% residual_init / (t(z_score) %*% F_dc %*% X[,id])
@@ -228,7 +228,7 @@ infer_ddlasso <- function(X,Y,rho=0.5,is.parallel=F,core_num = 4,
       cl <- parallel::makeCluster(core_num,type)
       doParallel::registerDoParallel(cl)
       coef_mat <- foreach::foreach(id = 1:p,.combine = 'rbind')%dopar%{
-        source('./R/fun_ddlasso.R')
+        # source('./R/fun_ddlasso.R')
         z_score <- score_ls[[id]]
         bias <- t(z_score) %*% F_dc  %*% residual_init / (t(z_score) %*% F_dc %*% X[,id])
 

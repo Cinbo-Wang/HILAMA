@@ -1,6 +1,6 @@
 Package: HILAMA
 Type: Package
-Title: HILAMA:High-dimensional exposure mediation analysis with latent confounder
+Title: HILAMA: High-dimensional exposure mediation analysis with latent confounder
 Version: 0.1.0
 Author: Xinbo Wang
 Maintainer: Xinbo Wang <cinbo_w@sjtu.edu.cn>

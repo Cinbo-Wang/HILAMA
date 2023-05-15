@@ -139,7 +139,7 @@ start estimation using `HILAMA`
 
 ```R
 require(HILAMA)
-result_ls <- hilama(X, M_multi, Y,parallel=T,core_num=5,verbose=T,is.adap = F)
+result_ls <- hilama(X, M_multi, Y,is.parallel=T,core_num=5,verbose=T,is.adap = F)
 
 nie_mat_hat <- result_ls$nie_mat_hat
 pvalue_Theta_mat <- result_ls$pvalue_Theta
