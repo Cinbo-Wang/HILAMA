@@ -107,8 +107,7 @@ pvalue_Theta_mat <- result_ls$pvalue_Theta
 pvalue_beta <- result_ls$pvalue_beta
 nie_mat_true <- Theta %*% diag(beta)
 
-loc_screen <- which(apply(pvalue_Theta_mat,2,function(x)sum(x==1)<length(x)))
-screen_N <- ceiling(0.1*p*length(loc_screen))
+screen_N <- ceiling(0.1*p*q)
 result_screen_jst_ls <- get_nie_pvalue_screen_JST(pvalue_Theta_mat,pvalue_beta,screen_N=screen_N,
                                                   alpha=0.1)
 pvalue_nie_screen_JST_mat <- result_screen_jst_ls$pvalue_screen_JST_mat
