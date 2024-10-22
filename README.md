@@ -1,7 +1,6 @@
 # HILAMA
 
-`HILAMA` is a R package to identify the nonzero acitive paths from high dimensional exposures, high dimensional mediators and continous outcome based on the Decorrelating \& Debiasing Approach [1], which can provide a guarantee of  
-false discovery rate control in finite sample settings.
+`HILAMA` is a R package to identify the nonzero acitive paths from high dimensional exposures, high dimensional mediators and continous outcome based on the Decorrelating \& Debiasing Approach [1], which can provide a guarantee of false discovery rate control in finite sample settings.
 
 ## Installation
 
