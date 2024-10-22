@@ -1,5 +1,3 @@
-
-
 #' Estimate the score matrix for a given data matrix.
 #'
 #' Estimate the score matrix of a data matrix using node-wise Lasso on the transformed data matrix.
@@ -17,7 +15,7 @@
 #' @examples
 #'
 
-esti_score_all <- function(X,nlambda=100,ratio_singular_min=1.5,Khat=NULL,parallel=F,core_num = 4){
+esti_score_all <- function(X,nlambda=100,ratio_singular_min=0,Khat=NULL,parallel=F,core_num = 4){
   require(glmnet);require(doParallel);require(foreach);require(dplyr);require(stats)
 
   X <- scale(X,center=TRUE,scale=FALSE)
@@ -249,12 +247,11 @@ infer_ddlasso <- function(X,Y,ratio_singular_min=1.5,Khat=NULL,
 #' @param Y A vector of continuous response data.
 #' @param Z A matrix of baseline covariates.
 #' @param parallel A logical value indicating whether to use parallel computation, default is TRUE.
-#' @param core_num The number of CPU cores to use in parallel computation, default is depends on your system.
-#' @param alpha0 P value threshold  to screen unnecessary mediators for the following mediator model.
+#' @param core_num The number of CPU cores to use in parallel computation.
 #' @param cut_off_ratio_singular_value Used to check the existence of hidden confounder. If \eqn{\frac{\lambda_k}{\lambda_{k+1}}} is always smaller than this value,
 #' then no hidden confounder exists and only single debiased procedure is applied.
-#' @param K_med Number of hidden confounder in the mediator model Y ~ M_multi.
-#' @param K_or Number of hidden confounder in the outcome model Y ~ M_multi + X.
+#' @param K_med Number of hidden confounders in the mediator model M_multi_j ~ X.
+#' @param K_or Number of hidden confounders in the outcome model Y ~ X + M_multi.
 #' @param verbose A logical value indicating whether to display progress info during computation, default is TRUE.
 #'
 #' @return
@@ -360,12 +357,11 @@ infer_ddlasso <- function(X,Y,ratio_singular_min=1.5,Khat=NULL,
 #' pvalue_beta <- result_ls$pvalue_beta
 #' nie_mat_true <- Theta %*% diag(beta)
 
-#' loc_screen <- which(apply(pvalue_Theta_mat,2,function(x)sum(x==1)<length(x)))
-#' screen_N <- ceiling(0.1*p*length(loc_screen))
+#' screen_N <- ceiling(0.1*p*q)
 #' result_screen_jst_ls <- get_nie_pvalue_screen_JST(pvalue_Theta_mat,pvalue_beta,screen_N=screen_N,
 #'                                                   alpha=0.1)
 #' pvalue_nie_screen_JST_mat <- result_screen_jst_ls$pvalue_screen_JST_mat
-#' result_eval_screen_JST <- cal_eval_metric(nie_mat_true,pvalue_nie_screen_JST_mat,sig_level=result_screen_jst_ls$pvalue_cutoff)
+#' result_eval_screen_JST <- cal_eval_metric(nie_mat_true,nie_mat_hat,pvalue_nie_screen_JST_mat,sig_level=result_screen_jst_ls$pvalue_cutoff)
 #' result_eval_screen_JST
 #'
 #' }
@@ -378,7 +374,7 @@ infer_ddlasso <- function(X,Y,ratio_singular_min=1.5,Khat=NULL,
 #' @import stats
 #'
 hilama_fast <- function(X, M_multi, Y, Z = NULL,
-                        parallel=T, core_num=4, alpha0 = 0.1,
+                        parallel=T, core_num=4,
                         cut_off_ratio_singular_value = 1.5, K_med=NULL,K_or = NULL,verbose=T){
 
   n <- nrow(X); p <- ncol(X); q <- ncol(M_multi)
@@ -402,73 +398,68 @@ hilama_fast <- function(X, M_multi, Y, Z = NULL,
 
   rownames(beta_gamma_hat_df) <- colnames(X_M)
   pvalue_M <- beta_gamma_hat_df$pvalue[-(1:p)]
-  loc_screen_M <- which(pvalue_M <= alpha0)
 
-  if(length(loc_screen_M)>0){
-    if(verbose) message('Start step 2:  X -> M \n')
-    if(!is.null(Z)){
-      P_Z <- Z %*% solve(t(Z)%*%Z) %*% t(Z)
-      M_multi_tilde <- (diag(n)- P_Z) %*% M_multi
-      X_tilde <- (diag(n) - P_Z) %*% X
-    }else{
-      M_multi_tilde <- M_multi
-      X_tilde <- X
-    }
 
-    score_X_ls <- esti_score_all(X=X_tilde,ratio_singular_min = cut_off_ratio_singular_value,
-                                 Khat = K_med,parallel = parallel,core_num = core_num)
-    K_med <- score_X_ls$Khat
-    result_Theta_ls <- vector('list',length=ncol(M_multi))
-    for(j in loc_screen_M){
-      Mj <- M_multi_tilde[,j]
-      coef_hat_df <- infer_ddlasso(X=X_tilde,Y=Mj, score_ls = score_X_ls$score_ls)
-      result_Theta_ls[[j]] <- coef_hat_df
-      # if(j %% 10 ==0 ) cat('j:',j,'.\n')
-    }
-    pvalue_Theta <- matrix(1,nrow=p,ncol=q,dimnames = list(colnames(X),colnames(M_multi)))
-    Theta_hat <- matrix(0,nrow=p,ncol=q,dimnames = list(colnames(X),colnames(M_multi)))
-    Z_Theta_hat <- matrix(0,nrow=p,ncol=q,dimnames = list(colnames(X),colnames(M_multi)))
-    for(j in loc_screen_M){
-      tmp <- result_Theta_ls[[j]]
-      u0 <- abs(tmp[,'dd_coef'] / tmp[,'sd'])
-
-      pvalue <- 2* pnorm(u0,lower.tail = F)
-      pvalue_Theta[,j] <- pvalue
-      Theta_hat[,j] <- tmp[,'dd_coef']
-      Z_Theta_hat[,j] <- u0
-    }
-
-    coef_ls <- list(X2M_ls = result_Theta_ls,
-                    beta_gamma_hat_df = beta_gamma_hat_df)
-
-    if(verbose) message('Start step 3: integrate results \n')
-    gamma_hat <- beta_gamma_hat_df$dd_coef[1:p]
-    beta_hat <- beta_gamma_hat_df$dd_coef[(p+1):(p+q)]
-    pvalue_gamma <- beta_gamma_hat_df$pvalue[1:p]
-    pvalue_beta <- beta_gamma_hat_df$pvalue[(p+1):(p+q)]
-
-    Z_gamma_beta_hat <- abs(beta_gamma_hat_df$dd_coef / beta_gamma_hat_df$sd)
-
-    nie_mat_hat <- Theta_hat %*% diag(beta_hat)
-    rownames(nie_mat_hat)  <- colnames(X)
-    colnames(nie_mat_hat)  <- colnames(M_multi)
-
-    nde_vec_hat <- gamma_hat
-    pvalue_nde <- pvalue_gamma
-    names(nde_vec_hat) <- names(pvalue_nde) <- colnames(X)
-
-    result_ls <- list(
-      nie_mat_hat = nie_mat_hat,
-      Theta_hat = Theta_hat, pvalue_Theta = pvalue_Theta,
-      beta_hat = beta_hat, pvalue_beta = pvalue_beta,
-      nde_vec_hat = nde_vec_hat, pvalue_nde = pvalue_nde,
-      K_med = K_med, K_or = K_or
-    )
-    return(result_ls)
+  if(verbose) message('Start step 2:  X -> M \n')
+  if(!is.null(Z)){
+    P_Z <- Z %*% solve(t(Z)%*%Z) %*% t(Z)
+    M_multi_tilde <- (diag(n)- P_Z) %*% M_multi
+    X_tilde <- (diag(n) - P_Z) %*% X
   }else{
-    warning('No significant mediators!')
-    return(NULL)
+    M_multi_tilde <- M_multi
+    X_tilde <- X
   }
+
+  score_X_ls <- esti_score_all(X=X_tilde,ratio_singular_min = cut_off_ratio_singular_value,
+                               Khat = K_med,parallel = parallel,core_num = core_num)
+  K_med <- score_X_ls$Khat
+  result_Theta_ls <- vector('list',length=ncol(M_multi))
+  for(j in 1:q){
+    Mj <- M_multi_tilde[,j]
+    coef_hat_df <- infer_ddlasso(X=X_tilde,Y=Mj, score_ls = score_X_ls$score_ls)
+    result_Theta_ls[[j]] <- coef_hat_df
+    # if(j %% 10 ==0 ) cat('j:',j,'.\n')
+  }
+  pvalue_Theta <- matrix(1,nrow=p,ncol=q,dimnames = list(colnames(X),colnames(M_multi)))
+  Theta_hat <- matrix(0,nrow=p,ncol=q,dimnames = list(colnames(X),colnames(M_multi)))
+  Z_Theta_hat <- matrix(0,nrow=p,ncol=q,dimnames = list(colnames(X),colnames(M_multi)))
+  for(j in 1:q){
+    tmp <- result_Theta_ls[[j]]
+    u0 <- abs(tmp[,'dd_coef'] / tmp[,'sd'])
+
+    pvalue <- 2* pnorm(u0,lower.tail = F)
+    pvalue_Theta[,j] <- pvalue
+    Theta_hat[,j] <- tmp[,'dd_coef']
+    Z_Theta_hat[,j] <- u0
+  }
+
+  coef_ls <- list(X2M_ls = result_Theta_ls,
+                  beta_gamma_hat_df = beta_gamma_hat_df)
+
+  if(verbose) message('Start step 3: integrate results \n')
+  gamma_hat <- beta_gamma_hat_df$dd_coef[1:p]
+  beta_hat <- beta_gamma_hat_df$dd_coef[(p+1):(p+q)]
+  pvalue_gamma <- beta_gamma_hat_df$pvalue[1:p]
+  pvalue_beta <- beta_gamma_hat_df$pvalue[(p+1):(p+q)]
+
+  Z_gamma_beta_hat <- abs(beta_gamma_hat_df$dd_coef / beta_gamma_hat_df$sd)
+
+  nie_mat_hat <- Theta_hat %*% diag(beta_hat)
+  rownames(nie_mat_hat)  <- colnames(X)
+  colnames(nie_mat_hat)  <- colnames(M_multi)
+
+  nde_vec_hat <- gamma_hat
+  pvalue_nde <- pvalue_gamma
+  names(nde_vec_hat) <- names(pvalue_nde) <- colnames(X)
+
+  result_ls <- list(
+    nie_mat_hat = nie_mat_hat,
+    Theta_hat = Theta_hat, pvalue_Theta = pvalue_Theta,
+    beta_hat = beta_hat, pvalue_beta = pvalue_beta,
+    nde_vec_hat = nde_vec_hat, pvalue_nde = pvalue_nde,
+    K_med = K_med, K_or = K_or
+  )
+  return(result_ls)
 }
 
 
