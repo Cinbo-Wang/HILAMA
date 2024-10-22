@@ -15,7 +15,6 @@ cal_eval_metric <- function(Theta_true,Theta_hat,pvalue_mat,sig_level=0.05){
   loc_active <- which(abs(Theta_true) > 1e-5,arr.ind = T)
   loc_zero <- which(abs(Theta_true) <= 1e-5, arr.ind = T)
 
-  # 仅计算active bias
   bias <- Reduce('+',
                  apply(loc_active,1,function(x){
                    abs(Theta_hat[x[1],x[2]] - Theta_true[x[1],x[2]])
@@ -70,7 +69,7 @@ get_nie_pvalue_screen_JST <- function(pvalue_Theta_mat,pvalue_beta,screen_N=NULL
     }
   }
   p_vec <- as.vector(pvalue_nie_mat_min)
-  c <- max(p_vec[rank(p_vec,ties.method = 'min')<=screen_N]) # for ties, we take the minimal value
+  c <- max(p_vec[rank(p_vec,ties.method = 'min')<=screen_N])
   screen_loc <- which(pvalue_nie_mat_min <= c,arr.ind = T)
 
 
@@ -80,13 +79,12 @@ get_nie_pvalue_screen_JST <- function(pvalue_Theta_mat,pvalue_beta,screen_N=NULL
     pvalue_screen_JST_mat[row_i,col_j] <- max(pvalue_Theta_mat[row_i,col_j],pvalue_beta[col_j])
   }
 
-  # 仅在满足min(pa,pb)的pair上进行BH adjust
   fdr_vec <- c();
-  p_vec <- sort(unique(as.vector(pvalue_screen_JST_mat)),decreasing = F)
+  p_vec <- setdiff(sort(unique(as.vector(pvalue_screen_JST_mat)),decreasing = F),1)
   for(i in 1:min(1000,length(p_vec))){
     t <- p_vec[i]
-    denom <- sum(pvalue_screen_JST_mat <= t)  # 改为包含等号！
-    numer <- nrow(screen_loc)*t  # 仅考虑min pvalue < c的
+    denom <- sum(pvalue_screen_JST_mat <= t)
+    numer <- nrow(screen_loc)*t
     fdr_tmp <- numer / denom
     fdr_vec <- c(fdr_vec,fdr_tmp)
     if(t > 0.1) break
