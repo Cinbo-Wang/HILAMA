@@ -12,7 +12,6 @@ hilama_fast(
   Z = NULL,
   parallel = T,
   core_num = 4,
-  alpha0 = 0.1,
   cut_off_ratio_singular_value = 1.5,
   K_med = NULL,
   K_or = NULL,
@@ -30,16 +29,14 @@ hilama_fast(
 
 \item{parallel}{A logical value indicating whether to use parallel computation, default is TRUE.}
 
-\item{core_num}{The number of CPU cores to use in parallel computation, default is depends on your system.}
-
-\item{alpha0}{P value threshold  to screen unnecessary mediators for the following mediator model.}
+\item{core_num}{The number of CPU cores to use in parallel computation.}
 
 \item{cut_off_ratio_singular_value}{Used to check the existence of hidden confounder. If \eqn{\frac{\lambda_k}{\lambda_{k+1}}} is always smaller than this value,
 then no hidden confounder exists and only single debiased procedure is applied.}
 
-\item{K_med}{Number of hidden confounder in the mediator model Y ~ M_multi.}
+\item{K_med}{Number of hidden confounders in the mediator model M_multi_j ~ X.}
 
-\item{K_or}{Number of hidden confounder in the outcome model Y ~ M_multi + X.}
+\item{K_or}{Number of hidden confounders in the outcome model Y ~ X + M_multi.}
 
 \item{verbose}{A logical value indicating whether to display progress info during computation, default is TRUE.}
 }
@@ -129,12 +126,11 @@ nie_mat_hat <- result_ls$nie_mat_hat
 pvalue_Theta_mat <- result_ls$pvalue_Theta
 pvalue_beta <- result_ls$pvalue_beta
 nie_mat_true <- Theta \%*\% diag(beta)
-loc_screen <- which(apply(pvalue_Theta_mat,2,function(x)sum(x==1)<length(x)))
-screen_N <- ceiling(0.1*p*length(loc_screen))
+screen_N <- ceiling(0.1*p*q)
 result_screen_jst_ls <- get_nie_pvalue_screen_JST(pvalue_Theta_mat,pvalue_beta,screen_N=screen_N,
                                                   alpha=0.1)
 pvalue_nie_screen_JST_mat <- result_screen_jst_ls$pvalue_screen_JST_mat
-result_eval_screen_JST <- cal_eval_metric(nie_mat_true,pvalue_nie_screen_JST_mat,sig_level=result_screen_jst_ls$pvalue_cutoff)
+result_eval_screen_JST <- cal_eval_metric(nie_mat_true,nie_mat_hat,pvalue_nie_screen_JST_mat,sig_level=result_screen_jst_ls$pvalue_cutoff)
 result_eval_screen_JST
 
 }
