@@ -4,7 +4,7 @@
 \alias{infer_ddlasso}
 \title{Infer the coefficient of high dimensional linear model with latent confounder using Decorrelating and Debiasing approach.}
 \usage{
-infer_ddlasso(X, Y, ratio_singular_min = 1.5, Khat = NULL, score_ls = NULL)
+infer_ddlasso(X, Y, ratio_singular_min = 0, Khat = NULL, score_ls = NULL)
 }
 \arguments{
 \item{X}{A data matrix.}

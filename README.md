@@ -112,6 +112,11 @@ result_screen_jst_ls <- get_nie_pvalue_screen_JST(pvalue_Theta_mat,pvalue_beta,s
 pvalue_nie_screen_JST_mat <- result_screen_jst_ls$pvalue_screen_JST_mat
 result_eval_screen_JST <- cal_eval_metric(nie_mat_true,nie_mat_hat,pvalue_nie_screen_JST_mat,sig_level=result_screen_jst_ls$pvalue_cutoff)
 result_eval_screen_JST
+
+# Get significant NIE and NDE
+result_sig_ls <- get_sig_nie_nde(result_ls)
+result_sig_ls$result_nie
+result_sig_ls$result_nde
 ```
 
 ## References

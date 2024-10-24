@@ -9,7 +9,7 @@
 #' @param parallel A logical value indicating whether to use parallel computation, default is TRUE.
 #' @param core_num The number of CPU cores to use in parallel computation, default is depends on your system.
 #'
-#' @return
+#' @return A list containing the score matrix and the estimated number of hidden confounders.
 #' @export
 #'
 #' @examples
@@ -155,7 +155,7 @@ esti_score_all <- function(X,nlambda=100,ratio_singular_min=0,Khat=NULL,parallel
 #' @export
 #'
 #' @examples
-infer_ddlasso <- function(X,Y,ratio_singular_min=1.5,Khat=NULL,
+infer_ddlasso <- function(X,Y,ratio_singular_min=0,Khat=NULL,
                           score_ls = NULL){
   require(glmnet);require(stats)
 
@@ -364,6 +364,10 @@ infer_ddlasso <- function(X,Y,ratio_singular_min=1.5,Khat=NULL,
 #' result_eval_screen_JST <- cal_eval_metric(nie_mat_true,nie_mat_hat,pvalue_nie_screen_JST_mat,sig_level=result_screen_jst_ls$pvalue_cutoff)
 #' result_eval_screen_JST
 #'
+#' result_sig_ls <- get_sig_nie_nde(result_ls)
+#' result_sig_ls$result_nie
+#' result_sig_ls$result_nde
+#'
 #' }
 
 
@@ -375,7 +379,7 @@ infer_ddlasso <- function(X,Y,ratio_singular_min=1.5,Khat=NULL,
 #'
 hilama_fast <- function(X, M_multi, Y, Z = NULL,
                         parallel=T, core_num=4,
-                        cut_off_ratio_singular_value = 1.5, K_med=NULL,K_or = NULL,verbose=T){
+                        cut_off_ratio_singular_value = 0, K_med=NULL,K_or = NULL,verbose=T){
 
   n <- nrow(X); p <- ncol(X); q <- ncol(M_multi)
 
@@ -452,15 +456,190 @@ hilama_fast <- function(X, M_multi, Y, Z = NULL,
   pvalue_nde <- pvalue_gamma
   names(nde_vec_hat) <- names(pvalue_nde) <- colnames(X)
 
-  result_ls <- list(
+  result_param_ls <- list(
     nie_mat_hat = nie_mat_hat,
     Theta_hat = Theta_hat, pvalue_Theta = pvalue_Theta,
     beta_hat = beta_hat, pvalue_beta = pvalue_beta,
     nde_vec_hat = nde_vec_hat, pvalue_nde = pvalue_nde,
     K_med = K_med, K_or = K_or
   )
-  return(result_ls)
+
+  return(result_param_ls)
 }
 
+
+
+
+#' Return the significant NIE and NDE.
+#'
+#' @param result_hilama_ls Object returned by hilama_fast.
+#' @param ratio_screen Number of pairs used for multiple testing. When the correlation among exposures is relatively high and the sample size is small, we recommend a high screening ratio to achieve greater power. In other scenarios, given the relatively minor changes in power, a moderate screening ratio may be considered to control the FDR.
+#' @param alpha The nominal False Discovery Rate level.
+#'
+#' @return
+#' \item{result_nie}{data frame of significant NIE using JST.}
+#' \item{result_nde}{data frame of significant NDE.}
+#' @export get_sig_nie_nde
+#'
+#' @examples
+get_sig_nie_nde <- function(result_hilama_ls,ratio_screen=0.1,alpha=0.1){
+  pvalue_Theta <- result_hilama_ls$pvalue_Theta
+  pvalue_beta <- result_hilama_ls$pvalue_beta
+  Theta_hat <- result_hilama_ls$Theta_hat
+  beta_hat <- result_hilama_ls$beta_hat
+  nie_mat_hat <- result_hilama_ls$nie_mat_hat
+
+  p <- nrow(pvalue_Theta);
+  q <- ncol(pvalue_Theta)
+  if(is.null(ratio_screen)){
+    screen_N <- ceiling(0.1*p*q)
+  }else{
+    screen_N <- ceiling(ratio_screen*p*q)
+  }
+  screen_jst_ls <- get_nie_pvalue_screen_JST(pvalue_Theta,pvalue_beta,screen_N,alpha)
+
+  pvalue_cutoff <- screen_jst_ls$pvalue_cutoff
+  pvalue_nie_mat <- screen_jst_ls$pvalue_screen_JST_mat
+  sig_loc <- which(pvalue_nie_mat <= pvalue_cutoff,arr.ind = TRUE)
+
+  result_nie_sig <- NULL
+  for(i in 1:nrow(sig_loc)){
+    row <- sig_loc[i,1]
+    col <- sig_loc[i,2]
+    pvalue <- pvalue_nie_mat[row,col]
+    nie <- nie_mat_hat[row,col]
+    result_nie_sig <- rbind(result_nie_sig,
+                            c(row,col,nie,pvalue))
+  }
+  result_nie_sig <- as.data.frame(result_nie_sig)
+  colnames(result_nie_sig) <- c('exp','med','nie','pvalue')
+
+  nde_vec_hat <- result_hilama_ls$nde_vec_hat
+  pvalue_nde <- result_hilama_ls$pvalue_nde
+
+  pvalue_nde_adj <- p.adjust(pvalue_nde,method='fdr')
+  loc_sig_nde <- which(pvalue_nde_adj <= alpha)
+
+  result_nde_sig <- NULL
+  for(i in 1:length(loc_sig_nde)){
+    loc <- loc_sig_nde[i]
+    result_nde_sig <- rbind(result_nde_sig,
+                            c(loc,nde_vec_hat[loc],pvalue_nde[loc]))
+  }
+  result_nde_sig <- as.data.frame(result_nde_sig)
+  colnames(result_nde_sig) <- c('exp','nde','pvalue')
+  return(list(
+    result_nie = result_nie_sig,
+    result_nde = result_nde_sig
+  ))
+}
+
+
+#' Calculate the FDR and Power of the test given the true signal.
+#'
+#' @param Theta_true True value of signal matrix.
+#' @param Theta_hat Estimated value of signal matrix.
+#' @param pvalue_mat Estimated p-value of Theta_true.
+#' @param sig_level The significance level.
+#'
+#' @return A vector including estimated FDR, Power and mean bias over nonzero locations.
+#' @export
+#'
+#' @examples
+cal_eval_metric <- function(Theta_true,Theta_hat,pvalue_mat,sig_level=0.05){
+
+  loc_active <- which(abs(Theta_true) > 1e-5,arr.ind = T)
+  loc_zero <- which(abs(Theta_true) <= 1e-5, arr.ind = T)
+
+  bias <- Reduce('+',
+                 apply(loc_active,1,function(x){
+                   abs(Theta_hat[x[1],x[2]] - Theta_true[x[1],x[2]])
+                 }))
+
+  num_sig <- sum(pvalue_mat <= sig_level)
+  num_tp <- Reduce('+',
+                   apply(loc_active,1,function(x){
+                     as.numeric(pvalue_mat[x[1],x[2]] <= sig_level)
+                   }))
+  num_fp <- num_sig - num_tp
+
+  power <-  num_tp / nrow(loc_active)
+
+  if(sum(pvalue_mat <= sig_level) ==0){
+    fdr <- 1
+  }else{
+    fdr <- num_fp/num_sig
+  }
+
+  bias_mean <- bias/length(loc_active)
+  eval_result <- c(fdr,power,bias_mean)
+  names(eval_result) <- c('fdr','power','bias_mean')
+  return(eval_result)
+}
+
+
+
+
+#' Get the p-value threshold for the mediation effect test using Joint Significance Test (JST).
+#'
+#' @param pvalue_Theta_mat p-value matrix of exposures to mediators.
+#' @param pvalue_beta p-value matrix of mediators to outcome.
+#' @param screen_N Number of pairs used for multiple testing.
+#' @param alpha The nominal False Discovery Rate level.
+#'
+#' @return
+#' \item{pvalue_screen_JST_mat}{p-value matrix of NIE using JST. The value of 1 indicates that the item has been screened out.}
+#' \item{pvalue_cutoff}{p-value threshold that controls the FDR at `\alpha` level.}
+#'
+#' @export get_nie_pvalue_screen_JST
+#'
+#' @examples
+get_nie_pvalue_screen_JST <- function(pvalue_Theta_mat,pvalue_beta,screen_N=NULL,
+                                      alpha=0.1){
+
+  loc_screen0 <- which(apply(pvalue_Theta_mat,2,function(x)sum(x==1)<length(x)))
+
+  p <- nrow(pvalue_Theta_mat); q <- ncol(pvalue_Theta_mat)
+  pvalue_nie_mat_min <- matrix(1,p,q)
+  for(i in 1:p){
+    for(j in loc_screen0){
+      pvalue_nie_mat_min[i,j] <- min(pvalue_Theta_mat[i,j],pvalue_beta[j])
+    }
+  }
+  p_vec <- as.vector(pvalue_nie_mat_min)
+  c <- max(p_vec[rank(p_vec,ties.method = 'min')<=screen_N])
+  screen_loc <- which(pvalue_nie_mat_min <= c,arr.ind = T)
+
+
+  pvalue_screen_JST_mat <- matrix(1,p,q)
+  for(it in 1:nrow(screen_loc)){
+    row_i <- screen_loc[it,1]; col_j <- screen_loc[it,2]
+    pvalue_screen_JST_mat[row_i,col_j] <- max(pvalue_Theta_mat[row_i,col_j],pvalue_beta[col_j])
+  }
+
+  fdr_vec <- c();
+  p_vec <- setdiff(sort(unique(as.vector(pvalue_screen_JST_mat)),decreasing = F),1)
+  for(i in 1:min(1000,length(p_vec))){
+    t <- p_vec[i]
+    denom <- sum(pvalue_screen_JST_mat <= t)
+    numer <- nrow(screen_loc)*t
+    fdr_tmp <- numer / denom
+    fdr_vec <- c(fdr_vec,fdr_tmp)
+    if(t > 0.1) break
+  }
+
+  if(min(fdr_vec)>alpha){
+    warning(paste0('minimal fdr is higher than alpha = ',alpha,'. The minimal fdr is ',min(fdr_vec)))
+    sig_level <- p_vec[which.min(fdr_vec)]
+  }else{
+    sig_level <- max((p_vec[1:length(fdr_vec)])[fdr_vec <= alpha])
+  }
+
+  return(list(
+    pvalue_screen_JST_mat = pvalue_screen_JST_mat,
+    pvalue_cutoff = sig_level
+  ))
+
+}
 
 

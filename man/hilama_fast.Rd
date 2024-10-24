@@ -12,7 +12,7 @@ hilama_fast(
   Z = NULL,
   parallel = T,
   core_num = 4,
-  cut_off_ratio_singular_value = 1.5,
+  cut_off_ratio_singular_value = 0,
   K_med = NULL,
   K_or = NULL,
   verbose = T

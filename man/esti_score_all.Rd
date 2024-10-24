@@ -7,7 +7,7 @@
 esti_score_all(
   X,
   nlambda = 100,
-  ratio_singular_min = 1.5,
+  ratio_singular_min = 0,
   Khat = NULL,
   parallel = F,
   core_num = 4
